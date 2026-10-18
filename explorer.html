@@ -94,7 +94,7 @@
 
   <section>
     <div class="controls">
-      <input type="search" id="q" placeholder="Search position or variant (e.g. 27, G27D, D308)" aria-label="Search variants">
+      <input type="search" id="q" placeholder="Search: 27, G27D, Thr189Met, rs34265469" aria-label="Search variants">
       <select id="cls" aria-label="Filter by class">
         <option value="all">All classes</option>
         <option value="likely_pathogenic">Likely pathogenic</option>
@@ -166,7 +166,6 @@ const DATA = [{"var":"S2C","pos":2,"score":0.6803,"cls":"likely_pathogenic","loc
 </script>
 
 <script>
-<script>
 const CLS_LABEL = {likely_pathogenic:"Likely pathogenic", ambiguous:"Ambiguous", likely_benign:"Likely benign"};
 let state = {q:"", cls:"all", freq:"all", knownOnly:false, sort:"pos"};
 
@@ -184,11 +183,30 @@ function afHTML(r){
   const pct = r.af < 0.0001 ? (r.af*100).toExponential(1) : (r.af*100).toFixed(r.af < 0.001 ? 4 : 2) + "%";
   return `${pct} <span class="rsid">(${r.ac}/${r.an})</span>`;
 }
+function threeLetter(v){
+  const m = v.match(/^([A-Z])(\d+)([A-Z*])$/);
+  if (!m) return "";
+  const inv = {A:"Ala",R:"Arg",N:"Asn",D:"Asp",C:"Cys",Q:"Gln",E:"Glu",G:"Gly",H:"His",I:"Ile",
+    L:"Leu",K:"Lys",M:"Met",F:"Phe",P:"Pro",S:"Ser",T:"Thr",W:"Trp",Y:"Tyr",V:"Val"};
+  return (inv[m[1]] || m[1]) + m[2] + (m[3] === "*" ? "*" : (inv[m[3]] || m[3]));
+}
 function passesFreq(r){
   if (state.freq === "absent") return !r.in_gnomad;
   if (state.freq === "rare") return !r.in_gnomad || r.af < 0.001;
   if (state.freq === "veryrare") return !r.in_gnomad || r.af < 0.0001;
   return true;
+}
+const AA3 = {Ala:"A",Arg:"R",Asn:"N",Asp:"D",Cys:"C",Gln:"Q",Glu:"E",Gly:"G",His:"H",Ile:"I",
+  Leu:"L",Lys:"K",Met:"M",Phe:"F",Pro:"P",Ser:"S",Thr:"T",Trp:"W",Tyr:"Y",Val:"V"};
+function toOneLetter(q){
+  // "p.Thr189Met", "thr189met", "Thr 189 Met" -> "T189M"
+  const m = q.replace(/^p\./, "").replace(/[^A-Za-z0-9]/g, "").match(/^([A-Za-z]{3})(\d+)(?:([A-Za-z]{3})|\*|=$)/);
+  if (m && AA3[m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase()]) {
+    const from = AA3[m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase()];
+    const to = m[3] ? (AA3[m[3].charAt(0).toUpperCase() + m[3].slice(1).toLowerCase()] || "X") : "X";
+    return from + m[2] + (m[3] ? to : "");
+  }
+  return q;
 }
 function filtered(){
   let rows = DATA.filter(r => {
@@ -197,7 +215,9 @@ function filtered(){
     if (!passesFreq(r)) return false;
     if (state.q) {
       const q = state.q.toLowerCase();
-      if (!r.var.toLowerCase().includes(q) && !String(r.pos).includes(q) &&
+      const q1 = toOneLetter(state.q).toLowerCase();
+      if (!r.var.toLowerCase().includes(q) && !r.var.toLowerCase().includes(q1) &&
+          !String(r.pos).includes(q) &&
           !(r.rsid && r.rsid.toLowerCase().includes(q))) return false;
     }
     return true;
@@ -213,7 +233,7 @@ function render(){
   const tb = document.getElementById("tbody");
   tb.innerHTML = rows.map(r => {
     const badge = r.known ? `<span class="badge-known badge-${r.known_cls || 'known'}">${r.known}</span>` : "";
-    return `<tr><td>${r.pos}</td><td class="variant-cell">${r.var}<br><span class="rsid">${r.loc}${r.rsid ? " · " + r.rsid : ""}</span></td>` +
+    return `<tr><td>${r.pos}</td><td class="variant-cell">${r.var}<br><span class="rsid">${threeLetter(r.var)}</span><br><span class="rsid">${r.loc}${r.rsid ? " · " + r.rsid : ""}</span></td>` +
       `<td><span class="score-chip" style="background:${scoreColor(r.score)}">${r.score.toFixed(3)}</span></td>` +
       `<td>${CLS_LABEL[r.cls]}</td><td class="af-cell">${afHTML(r)}</td><td>${badge}</td></tr>`;
   }).join("");
